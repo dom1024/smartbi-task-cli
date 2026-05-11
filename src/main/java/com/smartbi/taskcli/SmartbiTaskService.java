@@ -1,5 +1,8 @@
 package com.smartbi.taskcli;
 
+import java.io.PrintWriter;
+import java.io.StringWriter;
+
 import smartbi.sdk.ClientConnector;
 import smartbi.sdk.service.scheduletask.ScheduleTaskService;
 
@@ -64,7 +67,9 @@ public final class SmartbiTaskService {
         try {
           connector.close();
         } catch (Throwable closeEx) {
-          closeEx.printStackTrace(System.err);
+          StringWriter sw = new StringWriter();
+          closeEx.printStackTrace(new PrintWriter(sw));
+          System.err.println(SensitiveSanitizer.sanitize(sw.toString()));
         }
       }
     }

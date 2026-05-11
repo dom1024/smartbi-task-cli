@@ -79,7 +79,7 @@ public final class SmartbiTaskCli {
     } catch (Throwable t) {
       StringWriter sw = new StringWriter();
       t.printStackTrace(new PrintWriter(sw));
-      System.err.println(sanitizeSensitive(sw.toString()));
+      System.err.println(SensitiveSanitizer.sanitize(sw.toString()));
       String safe = safeExceptionMessage(t);
       System.out.println(new JsonResult(false, taskIdForJson, safe).toLine());
       System.exit(EXIT_SMARTBI_FAILED);
@@ -106,34 +106,7 @@ public final class SmartbiTaskCli {
     if (sb.length() == 0) {
       return t.getClass().getSimpleName();
     }
-    return sanitizeSensitive(sb.toString());
-  }
-
-  /**
-   * Masks values that appear after sensitive keywords (password, token, cookies, auth headers, etc.).
-   * Used for stdout JSON and for stderr stack traces so secrets are not leaked.
-   */
-  static String sanitizeSensitive(String raw) {
-    if (raw == null) {
-      return "";
-    }
-    String s = raw;
-    s = s.replaceAll("(?i)(Authorization\\s*:\\s*)(Bearer\\s+)(\\S+)", "$1$2***");
-    s = s.replaceAll("(?i)(Authorization\\s*:\\s*)(Basic\\s+)(\\S+)", "$1$2***");
-    s = s.replaceAll("(?i)(Authorization\\s*:\\s*)(\\S+)", "$1***");
-    s = s.replaceAll("(?i)((?:password|pwd|SMARTBI_PASSWORD)\\s*=\\s*)(\\S+)", "$1***");
-    s = s.replaceAll("(?i)((?:password|pwd|SMARTBI_PASSWORD)\\s*:\\s*)(\\S+)", "$1***");
-    s = s.replaceAll("(?i)(\\btoken\\b\\s*[:=]\\s*)(\\S+)", "$1***");
-    s = s.replaceAll("(?i)(JSESSIONID\\s*=\\s*)([^;\\s]+)", "$1***");
-    s = s.replaceAll("(?i)(Cookie\\s*:\\s*)([^\\r\\n]+)", "$1***");
-    s = s.replaceAll("(?i)(\\\"password\\\"\\s*:\\s*\\\")([^\"\\\\]*)(\")", "$1***$3");
-    s = s.replaceAll("(?i)(\\\"pwd\\\"\\s*:\\s*\\\")([^\"\\\\]*)(\")", "$1***$3");
-    s = s.replaceAll("(?i)(\\\"token\\\"\\s*:\\s*\\\")([^\"\\\\]*)(\")", "$1***$3");
-    s = s.replaceAll("(?i)(\\\"cookie\\\"\\s*:\\s*\\\")([^\"\\\\]*)(\")", "$1***$3");
-    s = s.replaceAll("(?i)(\\\"JSESSIONID\\\"\\s*:\\s*\\\")([^\"\\\\]*)(\")", "$1***$3");
-    s = s.replaceAll("(?i)(\\\"Authorization\\\"\\s*:\\s*\\\")([^\"\\\\]*)(\")", "$1***$3");
-    s = s.replaceAll("(?i)(\\\"SMARTBI_PASSWORD\\\"\\s*:\\s*\\\")([^\"\\\\]*)(\")", "$1***$3");
-    return s;
+    return SensitiveSanitizer.sanitize(sb.toString());
   }
 
   /**
