@@ -1,0 +1,28 @@
+# Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+release.properties
+
+# Smartbi / vendor binaries (copy from smartbi.war WEB-INF/lib per README)
+lib/*.jar
+
+# Local deployment artifact (large; not redistributable)
+smartbi.war
+*.war
+
+# Local war inspection scratch
+.war-inspect/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

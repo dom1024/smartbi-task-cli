@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="OFF">
+  <!-- Keep SDK off stdout: scheduling parsers expect a single JSON line on stdout. -->
+  <Loggers>
+    <Root level="OFF"/>
+  </Loggers>
+</Configuration>
