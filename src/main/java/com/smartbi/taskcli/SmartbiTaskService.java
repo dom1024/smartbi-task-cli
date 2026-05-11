@@ -47,8 +47,9 @@ public final class SmartbiTaskService {
    *         {@link ScheduleTaskService#executeTask(String)} returns true (remote invocation succeed bit).
    */
   public static SubmitOutcome submitTask(String smartbiUrl, String username, String password, String taskId) {
-    ClientConnector connector = new ClientConnector(smartbiUrl);
+    ClientConnector connector = null;
     try {
+      connector = new ClientConnector(smartbiUrl);
       if (!connector.open(username, password)) {
         return SubmitOutcome.loginFailed();
       }
@@ -59,7 +60,13 @@ public final class SmartbiTaskService {
       }
       return SubmitOutcome.ok();
     } finally {
-      connector.close();
+      if (connector != null) {
+        try {
+          connector.close();
+        } catch (Throwable closeEx) {
+          closeEx.printStackTrace(System.err);
+        }
+      }
     }
   }
 }

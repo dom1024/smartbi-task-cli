@@ -113,8 +113,11 @@ export SMARTBI_URL="http://smartbi.example.com/smartbi"
 export SMARTBI_USERNAME="scheduler_user"
 export SMARTBI_PASSWORD="${SMARTBI_PASSWORD:?set in secret store}"
 
+# With `set -e`, a failing command inside $(...) would exit the script before `CODE=$?`.
+set +e
 OUT=$(java -jar /opt/smartbi-task-cli/smartbi-task-cli.jar run --task-id "$TASK_ID")
 CODE=$?
+set -e
 echo "$OUT"
 exit "$CODE"
 ```
