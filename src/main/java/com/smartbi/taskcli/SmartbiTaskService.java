@@ -44,10 +44,37 @@ public final class SmartbiTaskService {
   private SmartbiTaskService() {}
 
   /**
-   * Opens a session, submits runTaskById via {@link ScheduleTaskService#executeTask(String)}, closes connector.
-   *
-   * @return {@link SubmitOutcome}; {@link SubmitPhase#OK} only when login succeeds and
-   *         {@link ScheduleTaskService#executeTask(String)} returns true (remote invocation succeed bit).
+   * Plan-level immediate run: {@link ScheduleTaskService#executeSchedule(String)} / {@code ScheduleSDK.run}.
+   */
+  public static SubmitOutcome submitSchedule(
+      String smartbiUrl, String username, String password, String scheduleId) {
+    ClientConnector connector = null;
+    try {
+      connector = new ClientConnector(smartbiUrl);
+      if (!connector.open(username, password)) {
+        return SubmitOutcome.loginFailed();
+      }
+      ScheduleTaskService scheduleTaskService = new ScheduleTaskService(connector);
+      boolean remoteOk = scheduleTaskService.executeSchedule(scheduleId);
+      if (!remoteOk) {
+        return SubmitOutcome.executeFailed();
+      }
+      return SubmitOutcome.ok();
+    } finally {
+      if (connector != null) {
+        try {
+          connector.close();
+        } catch (Throwable closeEx) {
+          StringWriter sw = new StringWriter();
+          closeEx.printStackTrace(new PrintWriter(sw));
+          System.err.println(SensitiveSanitizer.sanitize(sw.toString()));
+        }
+      }
+    }
+  }
+
+  /**
+   * Task-level: {@link ScheduleTaskService#executeTask(String)} / {@code ScheduleSDK.runTaskById}.
    */
   public static SubmitOutcome submitTask(String smartbiUrl, String username, String password, String taskId) {
     ClientConnector connector = null;

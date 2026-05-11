@@ -6,20 +6,24 @@ package com.smartbi.taskcli;
 public final class JsonResult {
 
   private final boolean success;
-  private final String taskId;
+  private final String idType;
+  private final String id;
   private final String message;
 
-  public JsonResult(boolean success, String taskId, String message) {
+  public JsonResult(boolean success, String idType, String id, String message) {
     this.success = success;
-    this.taskId = taskId == null ? "" : taskId;
+    this.idType = idType == null ? "" : idType;
+    this.id = id == null ? "" : id;
     this.message = message == null ? "" : message;
   }
 
   public String toLine() {
     return "{\"success\":"
         + success
-        + ",\"taskId\":\""
-        + escapeJson(taskId)
+        + ",\"idType\":\""
+        + escapeJson(idType)
+        + "\",\"id\":\""
+        + escapeJson(id)
         + "\",\"message\":\""
         + escapeJson(message)
         + "\"}";

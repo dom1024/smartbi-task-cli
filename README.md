@@ -1,6 +1,6 @@
 # smartbi-task-cli
 
-极薄命令行工具：通过 Smartbi **Java SDK** 触发已存在的计划任务（`executeTask` / 服务端 `runTaskById`），用于调度系统或脚本集成。
+极薄命令行工具：通过 Smartbi **Java SDK** 触发已存在的**计划**（`executeSchedule` / 服务端 `ScheduleSDK.run`）或**内部任务**（`executeTask` / `runTaskById`），用于调度系统或脚本集成。
 
 ## 依赖 JAR 来源
 
@@ -40,7 +40,7 @@ unzip -jo smartbi.war WEB-INF/lib/smartbi-SDK.jar \
 
 ## 日志与 stdout
 
-本工具在 `src/main/resources/log4j2.xml` 中将 **Root logger 设为 OFF**，避免 Smartbi SDK 向 **stdout** 打印日志，从而保证 **stdout 仅一行 JSON**（满足调度解析）。未捕获异常时仍会通过 **`Throwable.printStackTrace(System.err)`** 将堆栈打到 **stderr**。
+本工具在 `src/main/resources/log4j2.xml` 中将 **Root logger 设为 OFF**，避免 Smartbi SDK 向 **stdout** 打印日志，从而保证 **stdout 仅一行 JSON**（满足调度解析）。未捕获异常时，堆栈会先经 **`SensitiveSanitizer`** 再写入 **stderr**；`connector.close()` 失败时同样只向 **stderr** 输出脱敏后的堆栈。
 
 若需要排查连接问题，可暂时删除或修改该 `log4j2.xml` 后重新打包（注意 stdout 可能被日志污染）。
 
@@ -66,42 +66,64 @@ target/smartbi-task-cli.jar
 | `SMARTBI_USERNAME` | 登录用户名 |
 | `SMARTBI_PASSWORD` | 登录密码 |
 
-**不要在日志或脚本里回显密码。** 本工具 stdout 仅输出单行 JSON，stderr 仅在异常时打印堆栈，不会打印密码、Cookie、Token。
+**不要在日志或脚本里回显密码。** 本工具 stdout 仅输出单行 JSON；stderr 仅在异常或 `close` 失败时输出**脱敏后**的堆栈，不会原样打印密码、Cookie、Token。
 
 ## 运行
+
+### 首选：按计划 ID 触发（与计划任务界面常见 ID 一致）
+
+**`scheduleId`** 对应 Smartbi **计划**层面的立即执行（`executeSchedule` → `ScheduleSDK.run`）。从「计划任务」界面拿到的 ID 多数情况下是 **`scheduleId`**，请优先使用本命令：
 
 ```bash
 export SMARTBI_URL='http://localhost:18080/smartbi'
 export SMARTBI_USERNAME='admin'
 export SMARTBI_PASSWORD='******'
 
-java -jar target/smartbi-task-cli.jar run --task-id <taskId>
+java -jar target/smartbi-task-cli.jar run --schedule-id <scheduleId>
 ```
 
-说明：`executeTask` 返回的 `true` 仅表示 **远程调用成功**（`InvokeResult.isSucceed()`），**不保证**报表等业务已全部成功；业务结果请在 Smartbi 后台或任务日志中查看。
+### 兼容：按内部任务 ID 触发
+
+**`taskId`** 为系统内部**任务** ID（`executeTask` → `ScheduleSDK.runTaskById`）。仅当你明确持有内部 `taskId`、或需要与旧脚本对齐时使用：
+
+```bash
+java -jar target/smartbi-task-cli.jar run-task --task-id <taskId>
+```
+
+### 排错说明
+
+若使用 **`run-task --task-id`** 时服务端出现 **`null pointer`** 等异常，而界面上的 ID 实际是计划维度，请改用 **`run --schedule-id`**。
+
+说明：`executeSchedule` / `executeTask` 返回的 `true` 仅表示 **远程调用成功**（`InvokeResult.isSucceed()`），**不保证**报表等业务已全部成功；业务结果请在 Smartbi 后台或任务日志中查看。
 
 ## 标准输出（单行 JSON）
 
-成功：
+成功（计划）：
 
 ```json
-{"success":true,"taskId":"xxx","message":"submitted"}
+{"success":true,"idType":"scheduleId","id":"xxx","message":"submitted"}
 ```
 
-失败：
+成功（任务）：
 
 ```json
-{"success":false,"taskId":"xxx","message":"失败原因"}
+{"success":true,"idType":"taskId","id":"xxx","message":"submitted"}
 ```
 
-`message` 为英文固定短语或异常摘要（不含密码）。
+失败（同样单行，含 `idType` / `id`，解析失败时可能为空字符串）：
+
+```json
+{"success":false,"idType":"scheduleId","id":"xxx","message":"失败原因"}
+```
+
+`message` 为英文固定短语或脱敏后的异常摘要。
 
 ## 退出码
 
 | 码 | 含义 |
 |----|------|
-| 0 | 已提交：登录成功且 `executeTask` 为 `true` |
-| 1 | Smartbi 侧失败：登录失败、`executeTask` 为 `false`，或未捕获异常 |
+| 0 | 已提交：登录成功且 `executeSchedule` 或 `executeTask` 返回 `true` |
+| 1 | Smartbi 侧失败：登录失败、远程调用返回 `false`，或未捕获异常 |
 | 2 | 参数非法，或必需环境变量缺失 |
 
 ## 调度系统调用示例
@@ -115,7 +137,7 @@ export SMARTBI_PASSWORD="${SMARTBI_PASSWORD:?set in secret store}"
 
 # With `set -e`, a failing command inside $(...) would exit the script before `CODE=$?`.
 set +e
-OUT=$(java -jar /opt/smartbi-task-cli/smartbi-task-cli.jar run --task-id "$TASK_ID")
+OUT=$(java -jar /opt/smartbi-task-cli/smartbi-task-cli.jar run --schedule-id "$SCHEDULE_ID")
 CODE=$?
 set -e
 echo "$OUT"
@@ -126,7 +148,7 @@ exit "$CODE"
 
 ## 功能边界
 
-- 仅触发已有任务；不创建、修改、删除、禁用任务。
+- 仅触发已有计划或任务；不创建、修改、删除、禁用计划或任务。
 - 不实现 `getTaskLog`、任务列表、Web 服务或 Python 包装。
 
 ## 许可证
