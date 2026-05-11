@@ -94,6 +94,26 @@ java -jar target/smartbi-task-cli.jar run-task --task-id <taskId>
 
 若使用 **`run-task --task-id`** 时服务端出现 **`null pointer`** 等异常，而界面上的 ID 实际是计划维度，请改用 **`run --schedule-id`**。
 
+### 诊断命令（仅排查，勿用于长期调度）
+
+当 **`run --schedule-id`** 显示已提交但后台未见执行时，可用本命令查看与 `ScheduleTaskService.executeSchedule` 等价的 **`ClientConnector.remoteInvoke("ScheduleSDK", "run", …)`** 所返回的 **`InvokeResult`** 原始字段（`isSucceed`、`getResult()`、`getOriginalResult()` 的字符串形式）。**`result` / `originalResult` 会先经 `SensitiveSanitizer` 再写入 stdout**；异常堆栈同样经脱敏后写入 **stderr**。
+
+**不建议**在调度系统、定时任务中长期依赖本命令；正式触发请仍使用 **`run --schedule-id`**。
+
+```bash
+java -jar target/smartbi-task-cli.jar debug-run-schedule --schedule-id <scheduleId>
+```
+
+成功拿到 `InvokeResult` 时，stdout 单行示例（字段以实际为准）：
+
+```json
+{"success":true,"command":"debug-run-schedule","idType":"scheduleId","id":"xxx","isSucceed":true,"result":"...","originalResult":"...","message":"diagnostic complete"}
+```
+
+- **`success`**：是否已成功执行到 `remoteInvoke` 并得到 `InvokeResult`（未登录失败、未抛异常）。
+- **`isSucceed`**：SDK 对本次远程调用的成功标志（与正式 `run` 使用的判定一致）。
+- 退出码：`success` 为 `true` 时 **0**；登录失败或 `remoteInvoke` 抛错时 **1**；参数/环境错误仍为 **2**。
+
 说明：`executeSchedule` / `executeTask` 返回的 `true` 仅表示 **远程调用成功**（`InvokeResult.isSucceed()`），**不保证**报表等业务已全部成功；业务结果请在 Smartbi 后台或任务日志中查看。
 
 ## 标准输出（单行 JSON）
@@ -118,12 +138,14 @@ java -jar target/smartbi-task-cli.jar run-task --task-id <taskId>
 
 `message` 为英文固定短语或脱敏后的异常摘要。
 
+**`debug-run-schedule`** 另含 **`command`**、**`isSucceed`**、**`result`**、**`originalResult`** 字段，见上文「诊断命令」。
+
 ## 退出码
 
 | 码 | 含义 |
 |----|------|
-| 0 | 已提交：登录成功且 `executeSchedule` 或 `executeTask` 返回 `true` |
-| 1 | Smartbi 侧失败：登录失败、远程调用返回 `false`，或未捕获异常 |
+| 0 | 已提交：登录成功且 `executeSchedule` 或 `executeTask` 返回 `true`；**或** `debug-run-schedule` 已成功得到 `InvokeResult` |
+| 1 | Smartbi 侧失败：登录失败、远程调用返回 `false`，或未捕获异常；**或** `debug-run-schedule` 登录失败 / `remoteInvoke` 抛错 |
 | 2 | 参数非法，或必需环境变量缺失 |
 
 ## 调度系统调用示例
@@ -149,6 +171,7 @@ exit "$CODE"
 ## 功能边界
 
 - 仅触发已有计划或任务；不创建、修改、删除、禁用计划或任务。
+- **`debug-run-schedule`** 仅用于读取远程调用结果与排障，不作为生产调度接口。
 - 不实现 `getTaskLog`、任务列表、Web 服务或 Python 包装。
 
 ## 许可证
