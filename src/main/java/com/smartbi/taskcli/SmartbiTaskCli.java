@@ -9,6 +9,7 @@ import java.io.StringWriter;
  *   <li>{@code java -jar smartbi-task-cli.jar run --schedule-id <scheduleId>}</li>
  *   <li>{@code java -jar smartbi-task-cli.jar run-task --task-id <taskId>}</li>
  *   <li>{@code java -jar smartbi-task-cli.jar debug-run-schedule --schedule-id <scheduleId>}</li>
+ *   <li>{@code java -jar smartbi-task-cli.jar debug-run-task --task-id <taskId>}</li>
  * </ul>
  * Environment: SMARTBI_URL, SMARTBI_USERNAME, SMARTBI_PASSWORD
  */
@@ -53,6 +54,19 @@ public final class SmartbiTaskCli {
             SmartbiTaskService.debugRunSchedule(
                 config.getUrl(), config.getUsername(), config.getPassword(), idForJson);
         System.out.println(debugRunScheduleJsonLine(dbg, idForJson));
+        if (dbg.loginFailed || dbg.threw) {
+          System.exit(EXIT_SMARTBI_FAILED);
+        } else {
+          System.exit(EXIT_OK);
+        }
+        return;
+      }
+
+      if (parsed.kind == ParsedKind.DEBUG_RUN_TASK) {
+        SmartbiTaskService.DebugScheduleInvokeResult dbg =
+            SmartbiTaskService.debugRunTask(
+                config.getUrl(), config.getUsername(), config.getPassword(), idForJson);
+        System.out.println(debugRunTaskJsonLine(dbg, idForJson));
         if (dbg.loginFailed || dbg.threw) {
           System.exit(EXIT_SMARTBI_FAILED);
         } else {
@@ -146,6 +160,37 @@ public final class SmartbiTaskCli {
         + "\"}";
   }
 
+  /**
+   * Single-line JSON for {@code debug-run-task}: exposes {@link smartbi.sdk.InvokeResult} fields
+   * (values passed through {@link SensitiveSanitizer} before JSON escaping).
+   */
+  private static String debugRunTaskJsonLine(
+      SmartbiTaskService.DebugScheduleInvokeResult r, String taskId) {
+    String message;
+    if (r.loginFailed || r.threw) {
+      message = r.errorMessageSanitized;
+    } else {
+      message = "diagnostic complete";
+    }
+    String rs = SensitiveSanitizer.sanitize(r.resultText);
+    String orig = SensitiveSanitizer.sanitize(r.originalResultText);
+    return "{\"success\":"
+        + r.obtainedInvokeResult
+        + ",\"command\":\"debug-run-task\""
+        + ",\"idType\":\"taskId\""
+        + ",\"id\":\""
+        + JsonResult.escapeJson(taskId)
+        + "\",\"isSucceed\":"
+        + (r.obtainedInvokeResult ? r.isSucceed : false)
+        + ",\"result\":"
+        + jsonQuoted(rs)
+        + ",\"originalResult\":"
+        + jsonQuoted(orig)
+        + ",\"message\":\""
+        + JsonResult.escapeJson(message)
+        + "\"}";
+  }
+
   private static String jsonQuoted(String inner) {
     return "\"" + JsonResult.escapeJson(inner) + "\"";
   }
@@ -176,7 +221,8 @@ public final class SmartbiTaskCli {
   enum ParsedKind {
     RUN_SCHEDULE,
     RUN_TASK,
-    DEBUG_RUN_SCHEDULE
+    DEBUG_RUN_SCHEDULE,
+    DEBUG_RUN_TASK
   }
 
   static final class ParsedArgs {
@@ -206,20 +252,26 @@ public final class SmartbiTaskCli {
       return new ParsedArgs(ParsedKind.DEBUG_RUN_SCHEDULE, "scheduleId", scheduleId, null);
     }
 
+    static ParsedArgs okDebugTask(String taskId) {
+      return new ParsedArgs(ParsedKind.DEBUG_RUN_TASK, "taskId", taskId, null);
+    }
+
     static ParsedArgs failure(String error) {
       return new ParsedArgs(ParsedKind.RUN_TASK, "", "", error);
     }
   }
 
+  private static final String USAGE_EXPECTED =
+      "expected: run --schedule-id <scheduleId> OR run-task --task-id <taskId> "
+          + "OR debug-run-schedule --schedule-id <scheduleId> OR debug-run-task --task-id <taskId>";
+
   /**
-   * Accepts {@code run --schedule-id <id>}, {@code run-task --task-id <id>}, or
-   * {@code debug-run-schedule --schedule-id <id>}.
+   * Accepts {@code run --schedule-id <id>}, {@code run-task --task-id <id>},
+   * {@code debug-run-schedule --schedule-id <id>}, or {@code debug-run-task --task-id <id>}.
    */
   static ParsedArgs parseArgs(String[] args) {
     if (args == null || args.length != 3) {
-      return ParsedArgs.failure(
-          "expected: run --schedule-id <scheduleId> OR run-task --task-id <taskId> "
-              + "OR debug-run-schedule --schedule-id <scheduleId>");
+      return ParsedArgs.failure(USAGE_EXPECTED);
     }
     String cmd = args[0];
     String flag = args[1];
@@ -234,9 +286,10 @@ public final class SmartbiTaskCli {
       if ("run-task".equals(cmd) && "--task-id".equals(flag)) {
         return ParsedArgs.failure("missing --task-id value");
       }
-      return ParsedArgs.failure(
-          "expected: run --schedule-id <scheduleId> OR run-task --task-id <taskId> "
-              + "OR debug-run-schedule --schedule-id <scheduleId>");
+      if ("debug-run-task".equals(cmd) && "--task-id".equals(flag)) {
+        return ParsedArgs.failure("missing --task-id value");
+      }
+      return ParsedArgs.failure(USAGE_EXPECTED);
     }
     String id = value.trim();
     if ("run".equals(cmd) && "--schedule-id".equals(flag)) {
@@ -248,13 +301,14 @@ public final class SmartbiTaskCli {
     if ("run-task".equals(cmd) && "--task-id".equals(flag)) {
       return ParsedArgs.okTask(id);
     }
+    if ("debug-run-task".equals(cmd) && "--task-id".equals(flag)) {
+      return ParsedArgs.okDebugTask(id);
+    }
     if ("run".equals(cmd) && "--task-id".equals(flag)) {
       return ParsedArgs.failure(
           "obsolete: run --task-id; use run --schedule-id <scheduleId> for plan execution, "
               + "or run-task --task-id <taskId> for internal task id");
     }
-    return ParsedArgs.failure(
-        "expected: run --schedule-id <scheduleId> OR run-task --task-id <taskId> "
-            + "OR debug-run-schedule --schedule-id <scheduleId>");
+    return ParsedArgs.failure(USAGE_EXPECTED);
   }
 }

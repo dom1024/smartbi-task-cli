@@ -103,6 +103,39 @@ public final class SmartbiTaskService {
   private SmartbiTaskService() {}
 
   /**
+   * Diagnostic: same remote entry as {@code ScheduleTaskService.executeTask} —
+   * {@code ScheduleSDK.runTaskById} via {@link ClientConnector#remoteInvoke}.
+   */
+  public static DebugScheduleInvokeResult debugRunTask(
+      String smartbiUrl, String username, String password, String taskId) {
+    ClientConnector connector = null;
+    try {
+      connector = new ClientConnector(smartbiUrl);
+      if (!connector.open(username, password)) {
+        return DebugScheduleInvokeResult.loginFailed();
+      }
+      InvokeResult ir =
+          connector.remoteInvoke("ScheduleSDK", "runTaskById", new Object[] {taskId});
+      return DebugScheduleInvokeResult.fromInvokeResult(ir);
+    } catch (Throwable t) {
+      StringWriter sw = new StringWriter();
+      t.printStackTrace(new PrintWriter(sw));
+      System.err.println(SensitiveSanitizer.sanitize(sw.toString()));
+      return DebugScheduleInvokeResult.thrown(t);
+    } finally {
+      if (connector != null) {
+        try {
+          connector.close();
+        } catch (Throwable closeEx) {
+          StringWriter sw = new StringWriter();
+          closeEx.printStackTrace(new PrintWriter(sw));
+          System.err.println(SensitiveSanitizer.sanitize(sw.toString()));
+        }
+      }
+    }
+  }
+
+  /**
    * Diagnostic: same remote entry as {@code ScheduleTaskService.executeSchedule} —
    * {@code ScheduleSDK.run} via {@link ClientConnector#remoteInvoke}.
    */
